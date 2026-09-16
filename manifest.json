@@ -1,0 +1,19 @@
+{
+  "name": "Universal Share",
+  "short_name": "UniShare",
+  "description": "Universal 100% secure peer-to-peer browser file sharing over local Wi-Fi with zero servers.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"]
+}

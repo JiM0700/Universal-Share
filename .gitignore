@@ -1,0 +1,16 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# SSL Certificates (generated for local testing)
+*.pem
+*.key
+*.crt
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local scratch and editor
+.vscode/
+.idea/
