@@ -3,7 +3,7 @@
  * Caches all application assets for 100% offline operation.
  */
 
-const CACHE_NAME = 'unishare-v1';
+const CACHE_NAME = 'unishare-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS_TO_CACHE = [
   './css/styles.css',
   './js/crypto.js',
   './js/sdp-compress.js',
+  './js/jsqr.min.js',
   './js/qr-codec.js',
   './js/webrtc.js',
   './js/file-streamer.js',

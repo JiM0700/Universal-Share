@@ -129,7 +129,7 @@
 
         <!-- Camera Scanner Viewport -->
         <div id="scanner-container" class="scanner-container hidden">
-          <video id="scanner-video" playsinline muted></video>
+          <video id="scanner-video" playsinline muted autoplay></video>
           <div class="scanner-laser"></div>
           <div class="scanner-controls">
             <button id="btn-flip-camera" class="btn btn-sm btn-icon" title="Flip Camera">🔄</button>
@@ -161,6 +161,7 @@
   <!-- Scripts in dependency order -->
   <script src="js/crypto.js"></script>
   <script src="js/sdp-compress.js"></script>
+  <script src="js/jsqr.min.js"></script>
   <script src="js/qr-codec.js"></script>
   <script src="js/webrtc.js"></script>
   <script src="js/file-streamer.js"></script>

@@ -22,6 +22,7 @@ REQUIRED_FILES = [
     'css/styles.css',
     'js/crypto.js',
     'js/sdp-compress.js',
+    'js/jsqr.min.js',
     'js/qr-codec.js',
     'js/webrtc.js',
     'js/file-streamer.js',
