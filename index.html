@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Universal Share - Secure P2P Local File Transfer</title>
+  
+  <!-- PWA & Mobile Web Meta -->
+  <meta name="theme-color" content="#090d16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Universal Share">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <h1 class="brand-title">Universal Share</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span id="offline-badge" class="badge badge-outline hidden" title="Installed offline in browser cache">Offline Ready</span>
+        <div id="connection-badge" class="badge badge-secondary">
+          <span class="badge-dot"></span>Ready to Pair
+        </div>
+        <button id="theme-toggle" class="btn btn-icon" title="Toggle Dark/Light Mode">🌓</button>
+      </div>
+    </header>
+
+    <!-- Hero / Radar Section -->
+    <section class="hero-card">
+      <div id="radar-visual" class="radar-box">
+        <div class="radar-ring"></div>
+        <div class="radar-ring"></div>
+        <div class="radar-ring"></div>
+        <div class="radar-sweep"></div>
+        <div class="radar-center-dot"></div>
+      </div>
+
+      <h2 id="radar-status" class="hero-title">No Device Connected</h2>
+      <p id="radar-subtitle" class="hero-subtitle">
+        Connect iOS, Android, macOS, or PC directly over local Wi-Fi or Hotspot. Zero cloud servers.
+      </p>
+
+      <button id="btn-pair-device" class="btn btn-primary">⚡ Connect Device</button>
+
+      <!-- Security Card (SAS Verification) -->
+      <div id="security-card" class="security-card hidden">
+        <div class="security-header">
+          <span>🔒 256-Bit End-to-End Encrypted (AES-GCM)</span>
+        </div>
+        <div class="security-code-box">
+          <div id="sas-code" class="sas-code">------</div>
+          <div id="sas-emoji" class="sas-emoji">🛡️ 🔑 ⚡ 🚀</div>
+        </div>
+        <p class="security-desc">
+          Compare the 6-digit code or icons above with the peer device to verify zero eavesdropping.
+        </p>
+      </div>
+    </section>
+
+    <!-- File Drop Zone -->
+    <section>
+      <div id="dropzone" class="dropzone dropzone-disabled">
+        <div class="dropzone-icon">📁</div>
+        <h3 class="dropzone-title">Drag & Drop Files or Folders Here</h3>
+        <p class="dropzone-subtitle">Direct peer-to-peer streaming up to hundreds of megabytes per second</p>
+        
+        <div class="dropzone-actions">
+          <button id="btn-select-files" class="btn btn-secondary">📄 Select Files</button>
+          <button id="btn-select-folder" class="btn btn-secondary">📂 Select Folder</button>
+        </div>
+
+        <input type="file" id="file-input" multiple class="hidden">
+        <input type="file" id="folder-input" webkitdirectory directory multiple class="hidden">
+      </div>
+    </section>
+
+    <!-- Instant Text / Clipboard Share -->
+    <section class="text-share-box">
+      <input type="text" id="text-share-input" class="text-share-input" placeholder="Quick text / link to send to peer device...">
+      <button id="btn-send-text" class="btn btn-sm btn-secondary">Send Text</button>
+    </section>
+
+    <!-- Active Transfers Section -->
+    <section id="transfer-section" class="hidden">
+      <h3 class="section-title"><span>⚡</span> Active Transfers</h3>
+      <div id="transfer-list" class="transfer-list"></div>
+    </section>
+
+    <!-- Received Files Section -->
+    <section id="received-section" class="hidden">
+      <h3 class="section-title"><span>📥</span> Received Files</h3>
+      <div id="received-list" class="received-list"></div>
+    </section>
+  </div>
+
+  <!-- Pairing Modal -->
+  <div id="pairing-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Pair Devices Directly</h3>
+        <button id="btn-close-modal" class="btn btn-icon">✕</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button id="tab-qr" class="tab-btn tab-active">QR Code (Camera)</button>
+        <button id="tab-manual" class="tab-btn">Manual Code (Copy/Paste)</button>
+      </div>
+
+      <!-- QR Code Panel -->
+      <div id="panel-qr" class="qr-box">
+        <canvas id="qr-canvas" width="260" height="260"></canvas>
+        <p id="qr-instructions" class="qr-instructions">
+          Scan this QR code with the other device's camera.
+        </p>
+
+        <div style="width: 100%; display: flex; gap: 0.5rem; justify-content: center;">
+          <button id="btn-start-scan" class="btn btn-secondary btn-sm">📷 Open Camera Scanner</button>
+        </div>
+
+        <!-- Camera Scanner Viewport -->
+        <div id="scanner-container" class="scanner-container hidden">
+          <video id="scanner-video" playsinline muted></video>
+          <div class="scanner-laser"></div>
+          <div class="scanner-controls">
+            <button id="btn-flip-camera" class="btn btn-sm btn-icon" title="Flip Camera">🔄</button>
+            <button id="btn-stop-scan" class="btn btn-sm btn-icon" title="Stop Camera">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Code Panel -->
+      <div id="panel-manual" class="manual-box hidden">
+        <div>
+          <label style="font-size: 0.82rem; color: var(--text-muted);">1. Your Local Connection Code:</label>
+          <textarea id="manual-code-out" class="code-textarea" readonly></textarea>
+          <button id="btn-copy-code" class="btn btn-secondary btn-sm" style="margin-top: 0.35rem;">📋 Copy Code</button>
+        </div>
+
+        <div>
+          <label style="font-size: 0.82rem; color: var(--text-muted);">2. Paste Peer's Code Here:</label>
+          <textarea id="manual-code-in" class="code-textarea" placeholder="Paste peer code here..."></textarea>
+          <button id="btn-apply-code" class="btn btn-primary btn-sm" style="margin-top: 0.35rem;">Connect to Peer Code</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts in dependency order -->
+  <script src="js/crypto.js"></script>
+  <script src="js/sdp-compress.js"></script>
+  <script src="js/qr-codec.js"></script>
+  <script src="js/webrtc.js"></script>
+  <script src="js/file-streamer.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

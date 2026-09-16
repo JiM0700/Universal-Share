@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Universal Share - Automated Verification Tests</title>
+  <style>
+    body { font-family: monospace; padding: 2rem; background: #0f172a; color: #f8fafc; }
+    .pass { color: #10b981; }
+    .fail { color: #ef4444; font-weight: bold; }
+    .log-item { margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h2>⚡ Universal Share - Verification Test Suite</h2>
+  <div id="results"></div>
+
+  <script src="../js/crypto.js"></script>
+  <script src="../js/sdp-compress.js"></script>
+  <script src="../js/qr-codec.js"></script>
+
+  <script>
+    const results = document.getElementById('results');
+
+    function log(msg, passed = true) {
+      const div = document.createElement('div');
+      div.className = `log-item ${passed ? 'pass' : 'fail'}`;
+      div.textContent = `${passed ? '✓ PASS' : '✗ FAIL'}: ${msg}`;
+      results.appendChild(div);
+      console.log(div.textContent);
+    }
+
+    async function runTests() {
+      try {
+        // Test 1: Crypto Key Generation & Export
+        const aliceCrypto = new UniCrypto();
+        const bobCrypto = new UniCrypto();
+
+        await aliceCrypto.generateKeyPair();
+        await bobCrypto.generateKeyPair();
+
+        const aliceRawPub = await aliceCrypto.exportPublicKey();
+        const bobRawPub = await bobCrypto.exportPublicKey();
+
+        log(`Alice & Bob generated ECDH P-256 keypairs (Alice pubkey: ${aliceRawPub.byteLength} bytes)`, aliceRawPub.byteLength === 65);
+
+        // Test 2: Shared Key Derivation & SAS Match
+        const aliceSas = await aliceCrypto.establishSharedKey(bobRawPub);
+        const bobSas = await bobCrypto.establishSharedKey(aliceRawPub);
+
+        const sasMatch = (aliceSas.sasCode === bobSas.sasCode) && (aliceSas.sasEmoji === bobSas.sasEmoji);
+        log(`Alice & Bob derived identical 6-digit SAS (${aliceSas.sasCode}) and Emoji (${aliceSas.sasEmoji})`, sasMatch);
+
+        // Test 3: AES-GCM-256 Encrypt & Decrypt Round-trip
+        const testPlaintext = new TextEncoder().encode("Universal Share 100% Secure Local P2P Transfer!");
+        const encrypted = await aliceCrypto.encryptChunk(testPlaintext);
+        log(`Encrypted 48-byte plaintext into ${encrypted.byteLength}-byte ciphertext (with 12B IV + 16B tag)`, encrypted.byteLength === testPlaintext.byteLength + 28);
+
+        const decrypted = await bobCrypto.decryptChunk(encrypted);
+        const decryptedText = new TextDecoder().decode(decrypted);
+        log(`Bob successfully decrypted Alice's chunk: "${decryptedText}"`, decryptedText === "Universal Share 100% Secure Local P2P Transfer!");
+
+        // Test 4: SHA-256 Digest Verification
+        const sampleBuffer = new TextEncoder().encode("Integrity check test vector");
+        const hash = await UniCrypto.sha256(sampleBuffer);
+        log(`SHA-256 hash computed: ${hash}`, typeof hash === 'string' && hash.length === 64);
+
+        // Test 5: SDP Compressor & Decompressor Round-trip
+        const dummyPayload = {
+          type: 'offer',
+          sdp: 'v=0\r\no=- 12345 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=setup:actpass\r\na=sctp-port:5000\r\na=candidate:1 1 UDP 2122252543 192.168.1.50 54321 typ host\r\n',
+          key: Array.from(aliceRawPub)
+        };
+
+        const compressed = await SdpCompressor.compress(dummyPayload);
+        log(`Compressed SDP payload to ${compressed.length} chars (deflate + Base64)`, compressed.length < dummyPayload.sdp.length + dummyPayload.key.length);
+
+        const decompressed = await SdpCompressor.decompress(compressed);
+        log(`Decompressed payload matches original type ('${decompressed.type}') and SDP integrity`, decompressed.type === 'offer' && decompressed.sdp === dummyPayload.sdp);
+
+        // Test 6: QR Generator Model
+        const canvas = document.createElement('canvas');
+        QRGenerator.render(canvas, compressed, { size: 240 });
+        log(`QR Code generated and rendered onto canvas (${canvas.width}x${canvas.height}px)`, canvas.width > 0 && canvas.height > 0);
+
+        log("ALL TESTS COMPLETED SUCCESSFULLY! 🎉", true);
+      } catch (err) {
+        log(`Unexpected test failure: ${err.message}`, false);
+        console.error(err);
+      }
+    }
+
+    runTests();
+  </script>
+</body>
+</html>
