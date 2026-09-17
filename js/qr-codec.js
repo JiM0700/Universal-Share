@@ -689,14 +689,26 @@ class QRScanner {
       this.video.setAttribute('muted', 'true');
       this.video.setAttribute('autoplay', 'true');
 
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      // Auto-detect mobile vs desktop: mobile prefers rear (environment) camera, desktop prefers webcam
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const preferredFacing = isMobile ? this.facingMode : 'user';
+
+      const constraints = {
         video: {
-          facingMode: { ideal: this.facingMode },
+          facingMode: { ideal: preferredFacing },
           width: { ideal: 1280 },
           height: { ideal: 720 }
         },
         audio: false
-      });
+      };
+
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (constraintErr) {
+        console.warn('Constrained camera access failed, falling back to default video input:', constraintErr);
+        // Fallback for MacBooks/laptops without a rear camera or with strict permission models
+        this.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
 
       this.video.srcObject = this.stream;
       await this.video.play();

@@ -53,8 +53,11 @@ class UniShareApp {
       } else if (state === 'connecting') {
         this.ui.setConnectionState('connecting');
       } else if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+        const wasConnected = this.webrtc.connected;
         this.ui.setConnectionState('disconnected');
-        this.ui.showToast('Connection closed or disconnected', 'warning');
+        if (wasConnected) {
+          this.ui.showToast('Connection closed or disconnected', 'warning');
+        }
       }
     };
 
@@ -273,8 +276,8 @@ class UniShareApp {
           darkColor: '#0f172a'
         });
         this.ui.elements.qrInstructions.innerHTML = `
-          <strong>Step 1:</strong> Scan this code with the other device.<br/>
-          Or click <em>"Open Camera Scanner"</em> below if the other device is showing a code.
+          <strong>Step 1:</strong> Scan this code with your phone.<br/>
+          <strong>Step 2:</strong> When your phone displays its Answer, click <em>"📷 Open Camera Scanner"</em> below to scan it, or paste it in <em>"Manual Code"</em>.
         `;
       } catch (qrErr) {
         console.warn('QR render error, falling back to manual code:', qrErr);
@@ -340,7 +343,7 @@ class UniShareApp {
             darkColor: '#0f172a'
           });
           this.ui.elements.qrInstructions.innerHTML = `
-            <strong>Step 2:</strong> Scan this Answer QR code with the original device to finalize the direct P2P link!
+            <strong>Step 2:</strong> Scan this Answer QR code with your original device (Mac) to finalize the link! Or copy the code in <em>"Manual Code"</em>.
           `;
         } catch (qrErr) {
           console.warn('Answer QR render error, falling back to manual code:', qrErr);
@@ -349,7 +352,7 @@ class UniShareApp {
             Switch to the <em>"Manual Code"</em> tab above to copy and share your answer code.
           `;
         }
-        this.ui.showToast('Offer accepted! Scan the Answer QR code on Device 1', 'success');
+        this.ui.showToast('Offer accepted! Now scan this Answer on Mac', 'success');
 
       } else if (payload.type === 'answer') {
         // We are initiator, receiving Answer
