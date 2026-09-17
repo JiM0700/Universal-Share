@@ -113,6 +113,51 @@
         const scanResult = window.jsQR(imgData.data, imgData.width, imgData.height);
         log(`jsQR scanned generated QR code directly: matches token`, scanResult && scanResult.data === token);
 
+        // Test 7: Real-world Browser Stress Test (30+ candidates with TCP, IPv6, AWDL, STUN)
+        const heavyCandidates = [];
+        for (let i = 1; i <= 15; i++) {
+          heavyCandidates.push(`a=candidate:h${i} 1 UDP 2122260223 192.168.1.${10 + i} ${50000 + i} typ host generation 0 ufrag n73G network-id ${i} network-cost 10`);
+          heavyCandidates.push(`a=candidate:t${i} 1 TCP 1518280447 192.168.1.${10 + i} 9 typ host tcptype active`);
+          heavyCandidates.push(`a=candidate:s${i} 1 UDP 1686052607 73.189.20.14 ${50000 + i} typ srflx raddr 192.168.1.${10 + i} rport ${50000 + i}`);
+        }
+        const heavySdp = [
+          'v=0',
+          'o=- 987654321 2 IN IP4 127.0.0.1',
+          's=-',
+          't=0 0',
+          'a=group:BUNDLE 0',
+          'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+          'c=IN IP4 0.0.0.0',
+          'a=mid:0',
+          'a=setup:actpass',
+          'a=ice-ufrag:heavyUfrag99',
+          'a=ice-pwd:heavyPasswordWithLongAlphanumericString123',
+          'a=fingerprint:sha-256 AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99',
+          ...heavyCandidates
+        ].join('\r\n') + '\r\n';
+
+        const heavyOffer = {
+          type: 'offer',
+          sdp: heavySdp,
+          key: Array.from(aliceRawPub)
+        };
+
+        const heavyToken = await SdpCompressor.compress(heavyOffer);
+        log(`Pruned 45-candidate SDP down to ${heavyToken.length} chars (guaranteed < 450 chars)`, heavyToken.length < 450);
+
+        const heavyCanvas = document.createElement('canvas');
+        QRGenerator.render(heavyCanvas, heavyToken, { size: 300, errorCorrection: 'L' });
+        const heavyCtx = heavyCanvas.getContext('2d');
+        const heavyImgData = heavyCtx.getImageData(0, 0, heavyCanvas.width, heavyCanvas.height);
+        const heavyScan = window.jsQR(heavyImgData.data, heavyImgData.width, heavyImgData.height);
+        log(`jsQR scanned heavy-load QR code successfully without overflow`, heavyScan && heavyScan.data === heavyToken);
+
+        const heavyDecompressed = await SdpCompressor.decompress(heavyToken);
+        log(`Heavy SDP restored essential candidates and credentials`, 
+          heavyDecompressed.sdp.includes('heavyUfrag99') && 
+          heavyDecompressed.sdp.includes('192.168.1.11')
+        );
+
         log("ALL TESTS COMPLETED SUCCESSFULLY! 🎉", true);
       } catch (err) {
         log(`Unexpected test failure: ${err.message}`, false);

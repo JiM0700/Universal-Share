@@ -23,15 +23,19 @@ class SdpCompressor {
     // Extract essential dynamic values from SDP
     const ufragMatch = sdp.match(/a=ice-ufrag:([^\r\n]+)/);
     const pwdMatch = sdp.match(/a=ice-pwd:([^\r\n]+)/);
-    const fpMatch = sdp.match(/a=fingerprint:([^\r\n]+)/);
+    const fpMatch = sdp.match(/a=fingerprint:(?:sha-256\s+)?([^\r\n]+)/i);
 
-    // Extract all candidate lines
-    const candMatches = sdp.match(/a=candidate:([^\r\n]+)/g) || [];
-    const candidates = candMatches.map(line => line.replace(/^a=candidate:/, '').trim());
+    // Intelligently extract and prune candidates for compact representation
+    const candidates = SdpCompressor.extractCandidates(sdp);
 
     const ufrag = ufragMatch ? ufragMatch[1].trim() : '';
     const pwd = pwdMatch ? pwdMatch[1].trim() : '';
-    const fp = fpMatch ? fpMatch[1].trim() : '';
+    let fp = fpMatch ? fpMatch[1].trim() : '';
+
+    // If fingerprint contains colons, strip them and prefix for ultra-compact storage
+    if (fp.includes(':')) {
+      fp = fp.replace(/sha-256\s+/i, '').replace(/[:\s]/g, '');
+    }
 
     // Convert key to Base64
     const keyBytes = payload.key instanceof Uint8Array ? payload.key : new Uint8Array(payload.key);
@@ -51,6 +55,54 @@ class SdpCompressor {
     const tokenB64 = SdpCompressor._utf8ToBase64(jsonStr);
 
     return 'US1:' + tokenB64;
+  }
+
+  /**
+   * Intelligently extracts, deduplicates, and prioritizes essential UDP candidates
+   * for direct local WebRTC transfers, discarding TCP and unroutable candidates.
+   * @param {string} sdp
+   * @returns {Array<string>}
+   */
+  static extractCandidates(sdp) {
+    const candMatches = sdp.match(/a=candidate:([^\r\n]+)/g) || [];
+    const candidates = [];
+    const seen = new Set();
+
+    for (const match of candMatches) {
+      const line = match.replace(/^a=candidate:/, '').trim();
+      const m = line.match(/(?:a=candidate:)?(\S+)\s+(\d+)\s+(UDP|TCP)\s+(\d+)\s+(\S+)\s+(\d+)\s+typ\s+(\S+)/i);
+      if (!m) {
+        // Fallback for non-standard candidate lines
+        if (!seen.has(line) && candidates.length < 6) {
+          seen.add(line);
+          candidates.push(line);
+        }
+        continue;
+      }
+
+      const transport = m[3].toUpperCase();
+      const ip = m[5];
+      const port = m[6];
+      const type = m[7].toLowerCase();
+
+      // Only UDP candidates are suitable for direct local WebRTC DataChannels
+      if (transport !== 'UDP') continue;
+      // Skip loopback and unroutable link-local IPv6 addresses
+      if (ip === '127.0.0.1' || ip === '0.0.0.0' || ip === '::1' || ip.toLowerCase().startsWith('fe80:')) continue;
+
+      const dedupeKey = `${type}|${ip}|${port}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      // Compact representation: 'h' for host, 's' for srflx, or prefix with type letter
+      const typeCode = type === 'srflx' ? 's' : (type === 'host' ? 'h' : type);
+      candidates.push(`${typeCode} ${ip} ${port}`);
+
+      // Cap at top 6 candidates to guarantee the QR code stays small, sharp, and quick to scan
+      if (candidates.length >= 6) break;
+    }
+
+    return candidates;
   }
 
   /**
@@ -120,6 +172,13 @@ class SdpCompressor {
    * @returns {string} Reconstructed SDP
    */
   static rebuildSdp(type, obj) {
+    // Normalize and restore fingerprint
+    let fp = obj.f || '';
+    if (fp && !fp.includes(':') && fp.length === 64) {
+      fp = fp.match(/.{2}/g).join(':');
+    }
+    const fpLine = fp.toLowerCase().startsWith('sha-256 ') ? fp : `sha-256 ${fp.toUpperCase()}`;
+
     const lines = [
       'v=0',
       `o=- ${Date.now()} 2 IN IP4 127.0.0.1`,
@@ -135,13 +194,26 @@ class SdpCompressor {
       'a=max-message-size:262144',
       `a=ice-ufrag:${obj.u}`,
       `a=ice-pwd:${obj.p}`,
-      `a=fingerprint:${obj.f}`
+      `a=fingerprint:${fpLine}`
     ];
 
     if (Array.isArray(obj.c)) {
-      for (const cand of obj.c) {
-        if (cand && cand.trim()) {
-          lines.push(`a=candidate:${cand.trim()}`);
+      for (let i = 0; i < obj.c.length; i++) {
+        const cand = obj.c[i];
+        if (!cand || !cand.trim()) continue;
+        const trimmed = cand.trim();
+
+        if (trimmed.startsWith('h ') || trimmed.startsWith('s ')) {
+          const parts = trimmed.split(' ');
+          const candType = parts[0] === 's' ? 'srflx' : 'host';
+          const ip = parts[1];
+          const port = parts[2];
+          const priority = candType === 'host' ? 2122260223 : 1686052607;
+          lines.push(`a=candidate:${i + 1} 1 UDP ${priority} ${ip} ${port} typ ${candType}`);
+        } else {
+          // Full candidate line (legacy / raw test fallback)
+          const cleanLine = trimmed.replace(/^a=candidate:/, '').trim();
+          lines.push(`a=candidate:${cleanLine}`);
         }
       }
     }

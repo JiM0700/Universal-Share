@@ -262,17 +262,27 @@ class UniShareApp {
 
       const compressedToken = await SdpCompressor.compress(payload);
 
-      // Render QR Code onto canvas
-      QRGenerator.render(this.ui.elements.qrCanvas, compressedToken, {
-        size: 260,
-        darkColor: '#0f172a'
-      });
-
+      // Populate manual code first so it is guaranteed to be available
       this.ui.elements.manualCodeOut.value = compressedToken;
-      this.ui.elements.qrInstructions.innerHTML = `
-        <strong>Step 1:</strong> Scan this code with the other device.<br/>
-        Or click <em>"Open Camera Scanner"</em> below if the other device is showing a code.
-      `;
+
+      // Render QR Code onto canvas with graceful fallback
+      try {
+        QRGenerator.render(this.ui.elements.qrCanvas, compressedToken, {
+          size: 260,
+          errorCorrection: 'L',
+          darkColor: '#0f172a'
+        });
+        this.ui.elements.qrInstructions.innerHTML = `
+          <strong>Step 1:</strong> Scan this code with the other device.<br/>
+          Or click <em>"Open Camera Scanner"</em> below if the other device is showing a code.
+        `;
+      } catch (qrErr) {
+        console.warn('QR render error, falling back to manual code:', qrErr);
+        this.ui.elements.qrInstructions.innerHTML = `
+          <strong>Connection code ready!</strong><br/>
+          Switch to the <em>"Manual Code"</em> tab above to copy and share your code.
+        `;
+      }
     } catch (err) {
       console.error('Failed to create offer:', err);
       this.ui.showToast('Failed to start pairing: ' + err.message, 'error');
@@ -319,16 +329,26 @@ class UniShareApp {
 
         const compressedAnswer = await SdpCompressor.compress(answerPayload);
 
-        // Render Answer QR
-        QRGenerator.render(this.ui.elements.qrCanvas, compressedAnswer, {
-          size: 260,
-          darkColor: '#0f172a'
-        });
-
+        // Populate manual code first
         this.ui.elements.manualCodeOut.value = compressedAnswer;
-        this.ui.elements.qrInstructions.innerHTML = `
-          <strong>Step 2:</strong> Scan this Answer QR code with the original device to finalize the direct P2P link!
-        `;
+
+        // Render Answer QR with graceful fallback
+        try {
+          QRGenerator.render(this.ui.elements.qrCanvas, compressedAnswer, {
+            size: 260,
+            errorCorrection: 'L',
+            darkColor: '#0f172a'
+          });
+          this.ui.elements.qrInstructions.innerHTML = `
+            <strong>Step 2:</strong> Scan this Answer QR code with the original device to finalize the direct P2P link!
+          `;
+        } catch (qrErr) {
+          console.warn('Answer QR render error, falling back to manual code:', qrErr);
+          this.ui.elements.qrInstructions.innerHTML = `
+            <strong>Answer code ready!</strong><br/>
+            Switch to the <em>"Manual Code"</em> tab above to copy and share your answer code.
+          `;
+        }
         this.ui.showToast('Offer accepted! Scan the Answer QR code on Device 1', 'success');
 
       } else if (payload.type === 'answer') {

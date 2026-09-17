@@ -259,18 +259,33 @@ class QRCodeModel {
     const dataLen = bytes.length;
     let typeNumber = 1;
 
-    for (; typeNumber <= 40; typeNumber++) {
-      const limit = QRUtil.getCapacity(typeNumber, errorCorrectLevel);
-      if (dataLen <= limit) {
-        break;
-      }
+    // Try requested error correction level first; if too large, adaptively try 'L'
+    const levelsToTry = [errorCorrectLevel];
+    if (errorCorrectLevel !== 'L') {
+      levelsToTry.push('L');
     }
 
-    if (typeNumber > 40) {
+    let chosenLevel = errorCorrectLevel;
+    let found = false;
+
+    for (const level of levelsToTry) {
+      typeNumber = 1;
+      for (; typeNumber <= 40; typeNumber++) {
+        const limit = QRUtil.getCapacity(typeNumber, level);
+        if (dataLen <= limit) {
+          chosenLevel = level;
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    if (!found) {
       throw new Error(`Data too long to fit into standard QR Code (${dataLen} bytes).`);
     }
 
-    const qr = new QRCodeModel(typeNumber, errorCorrectLevel);
+    const qr = new QRCodeModel(typeNumber, chosenLevel);
     qr.addData(data);
     qr.make();
     return qr;

@@ -40,7 +40,7 @@ class UniWebRTC {
 
     const config = {
       iceServers: this.options.iceServers,
-      iceCandidatePoolSize: 2
+      iceCandidatePoolSize: 0
     };
 
     this.pc = new RTCPeerConnection(config);
