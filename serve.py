@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Universal Share - Local Network Server
-Serves Universal Share over local Wi-Fi with optional HTTPS for mobile camera access.
+Localdrop - Local Network Server
+Serves the Localdrop web app over local Wi-Fi with optional HTTPS for mobile browsers.
 """
 
 import os
@@ -9,6 +9,8 @@ import sys
 import socket
 import ssl
 import subprocess
+from urllib.parse import unquote, urlsplit
+import posixpath
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 PORT_HTTP = 8080
@@ -27,18 +29,31 @@ def get_local_ip():
         s.close()
     return ip
 
-def ensure_ssl_cert(cert_file='cert.pem', key_file='key.pem'):
-    """Generates a self-signed SSL certificate if one does not exist."""
-    if not (os.path.exists(cert_file) and os.path.exists(key_file)):
+def ensure_ssl_cert(local_ip, cert_file='cert.pem', key_file='key.pem'):
+    """Generates a local certificate whose SAN matches the LAN address."""
+    cert_matches_ip = False
+    if os.path.exists(cert_file) and os.path.exists(key_file):
+        try:
+            cert_info = subprocess.run(
+                ['openssl', 'x509', '-in', cert_file, '-noout', '-ext', 'subjectAltName'],
+                check=True, capture_output=True, text=True
+            )
+            cert_matches_ip = f'IPAddress:{local_ip}' in cert_info.stdout.replace(' ', '')
+        except Exception:
+            cert_matches_ip = False
+
+    if not cert_matches_ip:
         print("🔐 Generating self-signed SSL certificate for local Wi-Fi HTTPS...")
         cmd = [
             'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
             '-keyout', key_file, '-out', cert_file,
             '-days', '365', '-nodes',
-            '-subj', '/CN=localhost'
+            '-subj', '/CN=localhost',
+            '-addext', f'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:{local_ip}'
         ]
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.chmod(key_file, 0o600)
             print("✓ Generated cert.pem and key.pem")
         except Exception as e:
             print(f"⚠ Could not generate SSL certificate: {e}")
@@ -46,9 +61,32 @@ def ensure_ssl_cert(cert_file='cert.pem', key_file='key.pem'):
     return True
 
 class UniRequestHandler(SimpleHTTPRequestHandler):
+    PUBLIC_FILES = {
+        'index.html', 'manifest.json', 'sw.js', 'css/styles.css', 'icons/icon.svg',
+        'js/app.js', 'js/crypto.js', 'js/file-streamer.js', 'js/jsqr.min.js',
+        'js/qr-codec.js', 'js/sdp-compress.js', 'js/ui.js', 'js/webrtc.js'
+    }
+
+    def _allowed_asset(self):
+        path = posixpath.normpath(unquote(urlsplit(self.path).path).lstrip('/'))
+        if path in ('', '.'):
+            path = 'index.html'
+        return path in self.PUBLIC_FILES
+
+    def do_GET(self):
+        if not self._allowed_asset():
+            self.send_error(404)
+            return
+        super().do_GET()
+
+    def do_HEAD(self):
+        if not self._allowed_asset():
+            self.send_error(404)
+            return
+        super().do_HEAD()
+
     def end_headers(self):
-        # Enable CORS and Cache-Control headers for PWA
-        self.send_header('Access-Control-Allow-Origin', '*')
+        # Avoid stale app-shell assets during development.
         self.send_header('Cache-Control', 'no-cache')
         super().end_headers()
 
@@ -62,7 +100,7 @@ def run_server():
 
     protocol = "http"
     if use_https:
-        if ensure_ssl_cert():
+        if ensure_ssl_cert(local_ip):
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             ctx.load_cert_chain(certfile='cert.pem', keyfile='key.pem')
             httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
@@ -71,7 +109,7 @@ def run_server():
             print("Falling back to standard HTTP.")
 
     print("=" * 60)
-    print("⚡ UNIVERSAL SHARE - LOCAL P2P SERVER")
+    print("↗ LOCALDROP - LOCAL P2P SERVER")
     print("=" * 60)
     print(f"• Local (Mac):    {protocol}://localhost:{port}")
     print(f"• Phone / LAN:    {protocol}://{local_ip}:{port}")
@@ -90,7 +128,7 @@ def run_server():
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping Universal Share server.")
+        print("\nStopping Localdrop server.")
         httpd.server_close()
 
 if __name__ == '__main__':

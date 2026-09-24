@@ -7,12 +7,9 @@
 class UniWebRTC {
   constructor(options = {}) {
     this.options = Object.assign({
-      iceServers: [
-        // Free public STUN servers for NAT traversal if internet is present;
-        // if offline / local Wi-Fi, host candidates (LAN IPs) are used automatically.
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ],
+      // This app pairs devices on the same LAN. Host candidates work without
+      // internet access and avoid sending connection metadata to a STUN service.
+      iceServers: [],
       bufferedThreshold: 8 * 1024 * 1024,      // 8 MB max buffer limit
       lowThreshold: 2 * 1024 * 1024            // 2 MB resume threshold
     }, options);
@@ -134,7 +131,7 @@ class UniWebRTC {
       setTimeout(() => {
         this.pc.removeEventListener('icegatheringstatechange', checkState);
         resolve();
-      }, 1500);
+      }, 8000);
     });
   }
 

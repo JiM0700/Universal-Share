@@ -75,6 +75,20 @@ class FileStreamer {
    * @private
    */
   _initIncomingFile(meta) {
+    const maxTransferBytes = 1024 * 1024 * 1024;
+    if (!Number.isSafeInteger(meta.fileId) || meta.fileId < 1 ||
+        !Number.isSafeInteger(meta.size) || meta.size < 0 || meta.size > maxTransferBytes ||
+        !Number.isSafeInteger(meta.totalChunks) || meta.totalChunks < 1 || meta.totalChunks > 16384 ||
+        meta.totalChunks !== (Math.ceil(meta.size / this.CHUNK_SIZE) || 1) ||
+        typeof meta.name !== 'string' || meta.name.length === 0 || meta.name.length > 255 ||
+        typeof meta.sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(meta.sha256)) {
+      this.onTransferError({ fileId: meta.fileId, error: 'Peer sent invalid file details.' });
+      return;
+    }
+    if (this.incomingTransfers.has(meta.fileId)) {
+      this.onTransferError({ fileId: meta.fileId, error: 'Duplicate file transfer was rejected.' });
+      return;
+    }
     const transfer = {
       fileId: meta.fileId,
       name: meta.name,
@@ -93,7 +107,7 @@ class FileStreamer {
     };
 
     this.incomingTransfers.set(meta.fileId, transfer);
-    this.onTransferStart({ direction: 'receive', ...transfer });
+    this.onTransferStart({ direction: 'receive', ...transfer, totalBytes: meta.size, stage: 'Receiving' });
   }
 
   /**
@@ -106,6 +120,7 @@ class FileStreamer {
    * @private
    */
   async _handleBinaryChunk(arrayBuffer) {
+    if (arrayBuffer.byteLength < 9) return;
     const view = new DataView(arrayBuffer);
     const tag = view.getUint8(0);
     if (tag !== 0x02) return; // Not a chunk packet
@@ -116,6 +131,11 @@ class FileStreamer {
 
     const transfer = this.incomingTransfers.get(fileId);
     if (!transfer) return;
+    if (chunkIndex >= transfer.totalChunks || transfer.chunks[chunkIndex]) {
+      this.incomingTransfers.delete(fileId);
+      this.onTransferError({ fileId, error: 'Invalid or repeated file data was rejected.' });
+      return;
+    }
 
     // Decrypt chunk with E2EE key
     let decryptedChunk;
@@ -123,6 +143,7 @@ class FileStreamer {
       decryptedChunk = await this.crypto.decryptChunk(encryptedData);
     } catch (err) {
       console.error(`Decryption failed on chunk ${chunkIndex}:`, err);
+      this.incomingTransfers.delete(fileId);
       this.onTransferError({ fileId, error: 'Decryption failed: integrity compromised.' });
       return;
     }
@@ -141,7 +162,7 @@ class FileStreamer {
       transfer.lastSpeedBytes = transfer.receivedBytes;
     }
 
-    const progress = Math.min(100, (transfer.receivedBytes / transfer.size) * 100);
+    const progress = transfer.size === 0 ? 100 : Math.min(100, (transfer.receivedBytes / transfer.size) * 100);
     const remainingBytes = transfer.size - transfer.receivedBytes;
     const etaSeconds = transfer.speedBps > 0 ? Math.ceil(remainingBytes / transfer.speedBps) : 0;
 
@@ -178,6 +199,12 @@ class FileStreamer {
 
     // Free individual chunk array buffers
     transfer.chunks = null;
+
+    if (!verified) {
+      this.incomingTransfers.delete(fileId);
+      this.onTransferError({ fileId, error: 'File integrity check failed. The received file was discarded.' });
+      return;
+    }
 
     const result = {
       direction: 'receive',
@@ -240,10 +267,18 @@ class FileStreamer {
    * @private
    */
   async _sendFile(file) {
+    if (file.size > 1024 * 1024 * 1024) {
+      throw new Error('This browser app supports files up to 1 GiB per transfer.');
+    }
     const fileId = this.currentFileId++;
     const totalChunks = Math.ceil(file.size / this.CHUNK_SIZE) || 1;
 
-    // Compute SHA-256 digest upfront
+    this.onTransferStart({
+      direction: 'send', fileId, name: file.name, size: file.size,
+      totalBytes: file.size, totalChunks, stage: 'Preparing'
+    });
+
+    // Compute SHA-256 digest upfront. This may take time for large files.
     const sha256 = await UniCrypto.sha256(file);
 
     // Send FILE_HEADER
@@ -259,14 +294,6 @@ class FileStreamer {
     };
 
     await this.webrtc.send(JSON.stringify(header));
-
-    this.onTransferStart({
-      direction: 'send',
-      fileId,
-      name: file.name,
-      size: file.size,
-      totalChunks
-    });
 
     let sentBytes = 0;
     let lastSpeedTime = performance.now();
@@ -304,7 +331,7 @@ class FileStreamer {
         lastSpeedBytes = sentBytes;
       }
 
-      const progress = Math.min(100, (sentBytes / file.size) * 100);
+      const progress = file.size === 0 ? 100 : Math.min(100, (sentBytes / file.size) * 100);
       const remainingBytes = file.size - sentBytes;
       const etaSeconds = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : 0;
 
@@ -316,7 +343,8 @@ class FileStreamer {
         totalBytes: file.size,
         progress,
         speedBps,
-        etaSeconds
+        etaSeconds,
+        stage: 'Sending'
       });
     }
 

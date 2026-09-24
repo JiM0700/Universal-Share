@@ -86,7 +86,13 @@ class UniUI {
     toast.className = `toast toast-${type}`;
 
     const icon = type === 'success' ? '✓' : (type === 'error' ? '✕' : 'ℹ');
-    toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${message}</span>`;
+    const iconNode = document.createElement('span');
+    iconNode.className = 'toast-icon';
+    iconNode.textContent = icon;
+    const messageNode = document.createElement('span');
+    messageNode.className = 'toast-msg';
+    messageNode.textContent = message;
+    toast.append(iconNode, messageNode);
 
     this.elements.toastContainer.appendChild(toast);
     setTimeout(() => {
@@ -98,30 +104,27 @@ class UniUI {
   setConnectionState(state, peerName = '') {
     if (!this.elements.connectionBadge) return;
 
-    this.elements.connectionBadge.className = 'badge';
+    this.elements.connectionBadge.className = 'status-pill';
     if (state === 'connected') {
-      this.elements.connectionBadge.classList.add('badge-success');
-      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Connected: ${peerName || 'Direct P2P'}`;
-      this.elements.radarStatus.textContent = 'Device Connected & Ready';
-      this.elements.radarSubtitle.textContent = 'Local encrypted channel established over Wi-Fi/Hotspot';
+      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Connected`;
+      this.elements.radarStatus.textContent = 'Connected and ready';
+      this.elements.radarSubtitle.textContent = 'Connection is encrypted. Choose files to start sharing.';
       this.elements.radarVisual.classList.add('radar-connected');
-      this.elements.btnPairDevice.textContent = 'Connection Active';
+      this.elements.btnPairDevice.innerHTML = 'Connection active <span>✓</span>';
       this.elements.btnPairDevice.classList.add('btn-disabled');
       this.elements.dropzone.classList.remove('dropzone-disabled');
     } else if (state === 'connecting') {
-      this.elements.connectionBadge.classList.add('badge-warning');
-      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Negotiating Link...`;
-      this.elements.radarStatus.textContent = 'Connecting Devices...';
-      this.elements.radarSubtitle.textContent = 'Exchanging encryption keys and local network routes';
+      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Connecting`;
+      this.elements.radarStatus.textContent = 'Connecting devices…';
+      this.elements.radarSubtitle.textContent = 'Keep both devices open while the direct connection starts.';
       this.elements.radarVisual.classList.remove('radar-connected');
       this.elements.dropzone.classList.add('dropzone-disabled');
     } else {
-      this.elements.connectionBadge.classList.add('badge-secondary');
-      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Ready to Pair`;
-      this.elements.radarStatus.textContent = 'No Device Connected';
-      this.elements.radarSubtitle.textContent = 'Tap "Connect Device" to pair via QR code or local Wi-Fi';
+      this.elements.connectionBadge.innerHTML = `<span class="badge-dot"></span>Ready to pair`;
+      this.elements.radarStatus.textContent = 'No device connected';
+      this.elements.radarSubtitle.textContent = 'Open Localdrop on both devices. Start on one, then scan its code with the other.';
       this.elements.radarVisual.classList.remove('radar-connected');
-      this.elements.btnPairDevice.textContent = '⚡ Connect Device';
+      this.elements.btnPairDevice.innerHTML = 'Start pairing <span>→</span>';
       this.elements.btnPairDevice.classList.remove('btn-disabled');
       this.elements.dropzone.classList.add('dropzone-disabled');
       this.hideSecurityFingerprint();
@@ -156,18 +159,19 @@ class UniUI {
 
   updateTransferProgress(data) {
     this.elements.transferSection.classList.remove('hidden');
-    let item = document.getElementById(`transfer-${data.fileId}`);
+    const transferKey = `transfer-${data.direction}-${data.fileId}`;
+    let item = document.getElementById(transferKey);
 
     if (!item) {
       item = document.createElement('div');
-      item.id = `transfer-${data.fileId}`;
+      item.id = transferKey;
       item.className = 'transfer-card';
       item.innerHTML = `
         <div class="transfer-info">
           <div class="transfer-header">
             <span class="transfer-name font-medium">${this.escapeHtml(data.name)}</span>
             <span class="transfer-badge ${data.direction === 'send' ? 'badge-send' : 'badge-recv'}">
-              ${data.direction === 'send' ? '↑ Sending' : '↓ Receiving'}
+              ${this.escapeHtml(data.stage || (data.direction === 'send' ? 'Sending' : 'Receiving'))}
             </span>
           </div>
           <div class="progress-bar-bg">
@@ -187,8 +191,10 @@ class UniUI {
     const bytesSpan = item.querySelector('.transfer-bytes');
     const speedSpan = item.querySelector('.transfer-speed');
     const etaSpan = item.querySelector('.transfer-eta');
+    const statusSpan = item.querySelector('.transfer-badge');
 
     const sent = data.sentBytes || data.receivedBytes || 0;
+    statusSpan.textContent = data.stage || (data.direction === 'send' ? 'Sending' : 'Receiving');
     fill.style.width = `${data.progress.toFixed(1)}%`;
     bytesSpan.textContent = `${this.formatBytes(sent)} / ${this.formatBytes(data.totalBytes)} (${data.progress.toFixed(0)}%)`;
     speedSpan.textContent = `${this.formatBytes(data.speedBps)}/s`;
@@ -196,7 +202,7 @@ class UniUI {
   }
 
   completeTransfer(data) {
-    const item = document.getElementById(`transfer-${data.fileId}`);
+    const item = document.getElementById(`transfer-${data.direction}-${data.fileId}`);
     if (item) {
       setTimeout(() => item.remove(), 1200);
     }

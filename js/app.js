@@ -13,6 +13,8 @@ class UniShareApp {
 
     this.pairingRole = null; // 'initiator' | 'receiver'
     this.localPublicKeyRaw = null;
+    this.transferWakeLock = null;
+    this.transferActive = false;
 
     this.init();
   }
@@ -81,6 +83,7 @@ class UniShareApp {
 
   _bindStreamerEvents() {
     this.streamer.onTransferStart = (data) => {
+      this._setTransferActive(true);
       this.ui.showToast(`${data.direction === 'send' ? 'Sending' : 'Receiving'} "${data.name}"`, 'info');
       this.ui.updateTransferProgress({ ...data, progress: 0 });
     };
@@ -92,10 +95,12 @@ class UniShareApp {
     this.streamer.onTransferComplete = (data) => {
       this.ui.completeTransfer(data);
       this.ui.showToast(`Completed "${data.name}"`, 'success');
+      setTimeout(() => this._syncTransferActivity(), 0);
     };
 
     this.streamer.onTransferError = (err) => {
       this.ui.showToast(err.error || 'Transfer failed', 'error');
+      setTimeout(() => this._syncTransferActivity(), 0);
     };
 
     this.streamer.onClipboardReceived = (text) => {
@@ -108,8 +113,49 @@ class UniShareApp {
     };
   }
 
+  _syncTransferActivity() {
+    const active = this.streamer.isSending || this.streamer.incomingTransfers.size > 0;
+    this._setTransferActive(active);
+  }
+
+  _setTransferActive(active) {
+    this.transferActive = active;
+    const notice = document.getElementById('background-note');
+    if (notice) notice.classList.toggle('hidden', !active);
+    if (!active) {
+      if (this.transferWakeLock) {
+        this.transferWakeLock.release().catch(() => {});
+        this.transferWakeLock = null;
+      }
+      return;
+    }
+    if (!document.hidden && navigator.wakeLock && !this.transferWakeLock) {
+      navigator.wakeLock.request('screen').then(lock => {
+        if (!this.transferActive || document.hidden) {
+          lock.release().catch(() => {});
+          return;
+        }
+        this.transferWakeLock = lock;
+        lock.addEventListener('release', () => {
+          if (this.transferWakeLock === lock) this.transferWakeLock = null;
+        }, { once: true });
+      }).catch(() => {});
+    }
+  }
+
   _bindUiEvents() {
     const el = this.ui.elements;
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (this.transferWakeLock) {
+          this.transferWakeLock.release().catch(() => {});
+          this.transferWakeLock = null;
+        }
+      } else if (this.transferActive) {
+        this._setTransferActive(true);
+      }
+    });
 
     // Connect Device / Pair Button
     el.btnPairDevice.addEventListener('click', () => {
@@ -255,6 +301,8 @@ class UniShareApp {
     this.ui.elements.qrInstructions.textContent = 'Generating local pairing session...';
 
     try {
+      await this.crypto.generateKeyPair();
+      this.localPublicKeyRaw = await this.crypto.exportPublicKey();
       const offer = await this.webrtc.createOffer();
 
       const payload = {
@@ -312,6 +360,9 @@ class UniShareApp {
         // We are the receiver
         this.pairingRole = 'receiver';
         this._stopCamera();
+
+        await this.crypto.generateKeyPair();
+        this.localPublicKeyRaw = await this.crypto.exportPublicKey();
 
         // Establish E2EE Shared Key
         const { sasCode, sasEmoji } = await this.crypto.establishSharedKey(peerRawKey);

@@ -92,7 +92,7 @@ class UniCrypto {
   }
 
   /**
-   * Computes a 6-digit numeric verification code and a 4-emoji phrase
+   * Computes a 6-digit numeric verification code and a 6-emoji phrase
    * from the derived shared secret for visual comparison.
    * @private
    */
@@ -111,7 +111,9 @@ class UniCrypto {
     const e2 = emojiList[bits[5] % emojiList.length];
     const e3 = emojiList[bits[6] % emojiList.length];
     const e4 = emojiList[bits[7] % emojiList.length];
-    this.sasEmoji = `${e1} ${e2} ${e3} ${e4}`;
+    const e5 = emojiList[bits[8] % emojiList.length];
+    const e6 = emojiList[bits[9] % emojiList.length];
+    this.sasEmoji = `${e1} ${e2} ${e3} ${e4} ${e5} ${e6}`;
   }
 
   /**

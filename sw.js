@@ -3,7 +3,7 @@
  * Caches all application assets for 100% offline operation.
  */
 
-const CACHE_NAME = 'unishare-v2';
+const CACHE_NAME = 'localdrop-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

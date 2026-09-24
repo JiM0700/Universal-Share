@@ -1,11 +1,11 @@
 {
-  "name": "Universal Share",
-  "short_name": "UniShare",
-  "description": "Universal 100% secure peer-to-peer browser file sharing over local Wi-Fi with zero servers.",
+  "name": "Localdrop",
+  "short_name": "Localdrop",
+  "description": "Private direct file sharing between devices on your local network.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#090d16",
-  "theme_color": "#090d16",
+  "background_color": "#f4f6f8",
+  "theme_color": "#f4f6f8",
   "orientation": "any",
   "icons": [
     {
